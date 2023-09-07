@@ -1,0 +1,5 @@
+ddt               
+playwright
+rich
+# tomli
+python-dotenv

@@ -1,0 +1,10 @@
+*.code-workspace
+__pycache__/
+.vscode/
+venv/
+.venv/
+dist/
+i18n/
+.DS_Store
+.env
+miss/
