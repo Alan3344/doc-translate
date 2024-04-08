@@ -1,3 +1,4 @@
+import os
 from time import sleep
 from playwright.sync_api import Page, sync_playwright
 from skip_and_replace import StringPreprocessing
@@ -11,7 +12,8 @@ from tool import (
     sysHasArgs,
 )
 
-MAX_WORDS = 5000
+MAX_WORDS = int(os.getenv("max_words_length")) or 5000
+TIMEOUT = int(os.getenv("translate_timeout")) * 1000
 # filePaths = endswith()  # [8:9]
 skipAndReplace = StringPreprocessing()
 
@@ -26,11 +28,11 @@ def main():
             """docstring for Translate."""
 
             def get_lRu31(self):
-                return page.inner_text('.lRu31', timeout=20000)
+                return page.inner_text('.lRu31', timeout=TIMEOUT or 20000)
 
             def goPage(self, ready_to_translated_text: str):
                 url = setAndGetUrl(ready_to_translated_text)
-                if sysHasArgs('-l', '--link'):
+                if sysHasArgs('--url'):
                     fprint('>>', url)
                 page.goto(url)
                 assert 'Google' in page.title()
@@ -50,11 +52,9 @@ def main():
                 return text
 
             @add_data(*Paths)
-            def translate(self, index: int, filePath: str):
-                fprint('Input=>', index, filePath)
-
+            def translate(self, index: int, filePath: str, count: int):
+                fprint('Input=>', f'<index:{index}> {index + 1}/{count}', filePath)
                 # self.readyReadText(filePath)
-                fprint('split'.center(50, '-'))
 
                 def getResult():
                     fileContent: str = self.readyReadText(filePath)

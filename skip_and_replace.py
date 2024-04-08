@@ -11,7 +11,7 @@ class StringPreprocessing:
         REPLACE = 1
 
     skip_regex = r'|'.join(Rule.Keyword)  # 匹配规则
-    letter_case = False
+    letter_case = sysHasArgs('--ignore-case') or False
     translate_mark_before = Rule.translate_mark_before
     translate_mark_after = Rule.translate_mark_after
 
@@ -22,7 +22,10 @@ class StringPreprocessing:
         self._replaces = {}  # Save replacement dictionary
         self._re_replaces = {}  # Save replacement dictionary
         self._save_path = ''
-        self._perfix = '<{}>'
+        self._perfix = '{{{}}}'  # '≮{}≯'
+        self._written = {}
+        self.__index = 0
+        self.__count = 0
 
     def skip(self, func) -> Callable:
         """Skip some translations"""
@@ -51,9 +54,23 @@ class StringPreprocessing:
 
     def saveResult(self, text: str = '', save_path: str = ''):
         save_path = save_path or self._save_path
-        fprint('Input=>', save_path)
-        with open(save_path, 'w', encoding='utf-8') as stream:
-            return stream.write(text or self._out_text)
+        fprint('Output=>', save_path)
+        fprint('split'.center(50, '-'))
+
+        with open(save_path, 'w', encoding='utf-8') as fpw:
+            ret = fpw.write(text or self._out_text)
+            self._written.update({self.__index: save_path})
+            self.__index += 1
+            return ret
+
+    def checkFiles(self):
+        for index, file_path in self._written.items():
+            with open(file_path, 'r', encoding='utf-8') as fpr:
+                content = fpr.read()
+                # chars = self._perfix.replace('{}', '|')
+                chars = r'\{\d+\}'
+                if pips := re.findall(f'{chars}', content):
+                    fprint('check failed:', f'{pips} at {{index:{index}}}', file_path)
 
     def setReplaces(self, key, value):
         self._replaces.update({key: value})
@@ -65,12 +82,32 @@ class StringPreprocessing:
 
     def translateAfter(self, text: str = ''):
         text = text or self._out_text
-        for key, mark in self.translate_mark_before.items():
-            text = text.replace(key, mark)
-        for key, value in self._replaces.items():
-            text = text.replace(key, value)
-        for key, mark in self.translate_mark_after.items():
-            text = text.replace(key, mark)
+
+        def inner_replace(repls: dict):
+            nonlocal text
+            # 先替换长的
+            repls = dict(sorted(repls.items(), key=lambda t: len(t[1]), reverse=True))
+            for key, value in repls.items():
+                text = text.replace(key, value)
+
+        inner_replace(self.translate_mark_before)
+        inner_replace(self._replaces)
+        # Check again to see if there are still unrestored Keys.
+        inner_replace(self._replaces)
+        inner_replace(self.translate_mark_after)
+        # inner_replace(self.translate_mark_after)
+
+        # 标头中有url的，除去空格 (\n.+:\shttps.+)
+        if text1 := re.findall(r'((\n.+:)\s(https.+))', text):
+            for txt in text1:
+                # print(txt)
+                t1, t2, t3 = txt
+                new_txt = (
+                    ''.join([t2.rstrip() + ' ', t3.replace(' ', '')])
+                    .replace('？', '?')
+                    .replace('＆', '&')
+                )
+            text = text.replace(t1, new_txt)
         self._out_text = text
         return text
 
@@ -81,11 +118,13 @@ class StringPreprocessing:
         :return _type_: _description_s
         """
         # 长度由长到短
-        count = 0
         for ruleName, rule in Rule.markdown.items():
+            if sysHasArgs(f'--no-rule={ruleName}', f'--no:{ruleName}'):
+                continue
+
             if codes := re.findall(rule, text):
                 # 相同开头的项，长度优先
-                codes = sorted(list(set(codes)), reverse=True)
+                # codes = sorted(list(set(codes)), reverse=True)
                 match ruleName:
                     case 'md-link':
                         # codes = [x[0] for x in codes]
@@ -97,11 +136,11 @@ class StringPreprocessing:
                             codes = new_codes
 
                 for i, code in enumerate(codes):
-                    placeholder = self._perfix.format(f'{count}{i}')
+                    placeholder = self._perfix.format(f'{self.__count}{i}')
                     text = text.replace(code, placeholder)
                     self.setReplaces(placeholder, code)
 
-                count += 1
+                self.__count += 1
 
         return text
 
@@ -123,7 +162,7 @@ class StringPreprocessing:
         new_repls = sorted(list(set(new_repls or repls)), reverse=True)
         new_repls = [x for x in new_repls if f'{x}'.strip()]
         for i, rep in enumerate(new_repls):
-            placeholder = self._perfix.format(f'{i}')
+            placeholder = self._perfix.format(f'{self.__count}{i}')
             text = text.replace(rep, placeholder)
             self.setReplaces(placeholder, rep)
         if sysHasArgs('-r', '--replaces'):
@@ -142,6 +181,7 @@ class StringPreprocessing:
             case self.Oper.REPLACE:
                 self.translateAfter(self._out_text)
                 self.saveResult()
+                self.checkFiles()
                 return self._out_text
             case _:
                 return '<NULL>'
